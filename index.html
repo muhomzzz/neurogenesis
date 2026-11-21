@@ -1,0 +1,33 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Neurogenesis</title>
+<style>:root{--bg:#eef1f4;--ink:#16202a;--mut:#5b6875;--line:#c9d1d9;--pain:#c2185b;--ok:#0b7a5a}
+@media(prefers-color-scheme:dark){:root{--bg:#10161c;--ink:#e6edf3;--mut:#8b98a5;--line:#2a3541}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif;padding:16px;max-width:1100px;margin-inline:auto}
+h1{font:600 22px Georgia,serif;margin:0 0 4px}h2{font:600 15px Georgia,serif;margin:16px 0 6px}.s{color:var(--mut);margin:0 0 12px}
+canvas{width:100%;border:1px solid var(--line);background:var(--bg)}button{font:inherit;padding:6px 12px;border:1px solid var(--ink);background:none;color:var(--ink);cursor:pointer;margin:0 4px 4px 0}button:focus-visible{outline:3px solid var(--pain)}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}.bar{display:flex;align-items:center;gap:8px;margin:2px 0}.bar i{display:block;height:8px;background:var(--ok)}.bar span{width:90px;color:var(--mut)}
+table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid var(--line);padding:2px 6px;text-align:left}pre{white-space:pre-wrap;margin:0}</style>
+<h1>Neurogenesis</h1><p class=s>A spiking-network model with six brain-inspired regions. Everything below comes from the running simulation; stimulus A is rewarded when approached, stimulus B causes harm when approached.</p>
+<div><button onclick="p('start')">Start</button><button onclick="p('pause')">Pause</button><button onclick="p('reset')">Reset</button>
+<button onclick="p('trial',{stim:0})">Show stimulus A</button><button onclick="p('trial',{stim:1})">Show stimulus B</button><button onclick="p('sleep')">Sleep (replay)</button>
+<button onclick="p('save')">Save state</button><button onclick="p('load')">Load state</button><button onclick="exp()">Run 160-trial experiment</button>
+<label>Speed <input type=range min=.02 max=1 step=.02 value=.3 oninput="p('speed',{delay:+this.value})"></label></div>
+<h2>Spikes, last 200 ms (click a row to inspect a neuron)</h2><canvas id=r width=1000 height=260></canvas><pre id=n class=s>No neuron selected.</pre>
+<div class=g><div><h2>Region firing rate (Hz)</h2><div id=reg></div><h2>Neuromodulators and internal state</h2><div id=emo></div></div>
+<div><h2>Learning: correct choices, last 200 trials</h2><canvas id=c width=500 height=140></canvas><p class=s id=acc></p><pre id=ex class=s></pre>
+<h2>Recent memories</h2><table id=mem></table><p class=s id=sem></p></div></div>
+<script>
+const col={SENS:'#2a6fdb',CTX:'#0b7a5a',HIPP:'#8a5cd6',AMY:'#c2185b',BG:'#c77700',PFC:'#5b6875'};let S;
+const p=(a,b={})=>fetch('/api/'+a,{method:'POST',body:JSON.stringify(b)});
+async function exp(){ex.textContent='Running...';const d=await(await fetch('/api/experiment',{method:'POST',body:'{}'})).json();ex.textContent=`Fresh network, 160 trials: first 40 ${(d.early*100).toFixed(0)}% correct, last 40 ${(d.late*100).toFixed(0)}% (chance 50%)`}
+const bar=(k,v,m)=>`<div class=bar><span>${k}</span><i style="width:${Math.max(0,Math.min(1,v/m))*160}px"></i>${(+v).toFixed(2)}</div>`;
+function draw(){const c=r.getContext('2d'),W=r.width,H=r.height;c.clearRect(0,0,W,H);for(const[k,[a,b]]of Object.entries(S.bounds)){c.fillStyle=col[k];
+ for(const[t,ids]of S.raster)for(const i of ids)if(i>=a&&i<b)c.fillRect(t*W/200,i*H/S.N,3,Math.max(1,H/S.N))}
+ const q=c_.getContext('2d');q.clearRect(0,0,500,140);const h=S.hist;q.strokeStyle=col.CTX;q.beginPath();let w=10;h.forEach((_,i)=>{if(i<w)return;const m=h.slice(i-w,i).reduce((a,b)=>a+b)/w;q[i==w?'moveTo':'lineTo'](i*500/200,140-m*130)});q.stroke();q.setLineDash([4,4]);q.strokeStyle='#888';q.beginPath();q.moveTo(0,75);q.lineTo(500,75);q.stroke();q.setLineDash([])}
+const c_=document.getElementById('c');
+async function tick(){S=await(await fetch('/api/state')).json();draw();reg.innerHTML=Object.entries(S.rates).map(([k,v])=>bar(k,v,60)).join('');
+ emo.innerHTML=Object.entries(S.mod).map(([k,v])=>bar(k,v,1)).join('')+Object.entries(S.emo).map(([k,v])=>bar(k,Math.abs(v),1)).join('');
+ acc.textContent=`Trial ${S.hist.length?S.t:0} ms simulated. Accuracy over last 20 trials: ${(S.acc*100).toFixed(0)}%. Mean plastic weight: ${S.wp_mean.toFixed(3)}`;
+ mem.innerHTML='<tr><th>t<th>stim<th>act<th>outcome<th>harm<th>strength</tr>'+S.mem.map(m=>`<tr><td>${m.t}<td>${'AB'[m.stim]}<td>${['approach','avoid'][m.act]}<td>${m.out.toFixed(1)}<td>${m.harm}<td>${m.strength.toFixed(2)}`).join('');
+ sem.textContent='Semantic memory (stim:action to mean outcome): '+JSON.stringify(Object.fromEntries(Object.entries(S.sem).map(([k,v])=>[k,+v.toFixed(2)])))}
+r.onclick=async e=>{const b=r.getBoundingClientRect(),i=Math.floor((e.clientY-b.top)/b.height*S.N);n.textContent=JSON.stringify(await(await fetch('/api/neuron/'+i)).json())};
+setInterval(tick,400);tick();</script>

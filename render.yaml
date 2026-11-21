@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: neurogenesis-brain-simulation
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
